@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Battery Shake fast charge</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 300px;
+        height: 250px;
+        overflow: hidden;
+      }
+      body {
+        font-family: Arial, sans-serif;
+      }
+      #creative {
+        position: relative;
+        width: 300px;
+        height: 250px;
+        overflow: hidden;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        background: #000;
+        isolation: isolate;
+      }
+      #scene1 {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.25s ease;
+        overflow: hidden;
+      }
+      #scene1.hide {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .bg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        pointer-events: none;
+      }
+      .shade {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+          circle at center,
+          rgba(0, 0, 0, 0),
+          rgba(0, 0, 0, 0.2) 70%,
+          rgba(0, 0, 0, 0.32)
+        );
+        pointer-events: none;
+      }
+      .battery-ui {
+        position: relative;
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        transform: translateY(3px);
+      }
+      .battery {
+        position: relative;
+        width: 58px;
+        height: 108px;
+        display: flex;
+        flex-direction: column-reverse;
+        gap: 4px;
+        padding: 7px 6px;
+        border: 3px solid rgba(255, 255, 255, 0.96);
+        border-radius: 9px;
+        background: rgba(0, 0, 0, 0.25);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+      }
+      .battery:before {
+        content: "";
+        position: absolute;
+        top: -10px;
+        left: 17px;
+        width: 18px;
+        height: 8px;
+        border-radius: 5px 5px 2px 2px;
+        background: rgba(255, 255, 255, 0.96);
+      }
+      .cell {
+        position: relative;
+        flex: 1;
+        overflow: hidden;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.13);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+      }
+      /* fill height is driven from JS through --h (0% - 100%) */
+      .cell:before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: var(--h, 0%);
+        border-radius: inherit;
+        background: linear-gradient(180deg, #c9ff3d, #65d21f);
+        box-shadow: 0 0 8px rgba(168, 255, 50, 0.5);
+      }
+      /* low battery turns the fill orange/red so the real level reads clearly */
+      .battery.low .cell:before {
+        background: linear-gradient(180deg, #ffb13d, #ff6a1f);
+        box-shadow: 0 0 8px rgba(255, 130, 50, 0.55);
+      }
+      .battery.charging .cell:before {
+        background: linear-gradient(180deg, #c9ff3d, #65d21f);
+        box-shadow: 0 0 8px rgba(168, 255, 50, 0.5);
+      }
+      /* percentage text in the middle of the battery */
+      #pct {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 17px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        text-shadow:
+          0 1px 3px rgba(0, 0, 0, 0.75),
+          0 0 8px rgba(0, 0, 0, 0.5);
+        opacity: 0;
+        transform: scale(0.8);
+        transition:
+          opacity 0.2s ease,
+          transform 0.2s ease;
+        pointer-events: none;
+      }
+      #pct.show {
+        opacity: 1;
+        transform: scale(1);
+      }
+      .battery.charging {
+        animation: batteryVibrate 0.08s linear infinite;
+      }
+      @keyframes batteryVibrate {
+        0% {
+          transform: translateX(0);
+        }
+        20% {
+          transform: translateX(-2px);
+        }
+        40% {
+          transform: translateX(2px);
+        }
+        60% {
+          transform: translateX(-2px);
+        }
+        80% {
+          transform: translateX(2px);
+        }
+        100% {
+          transform: translateX(0);
+        }
+      }
+      .battery.full {
+        animation: fullPulse 0.32s ease-out 1;
+      }
+      @keyframes fullPulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.06);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      #hint {
+        margin-top: 10px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-align: center;
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
+        animation: hintPulse 1.1s ease-in-out infinite;
+        transition:
+          opacity 0.18s ease,
+          transform 0.18s ease;
+      }
+      #hint.hide {
+        opacity: 0;
+        transform: translateY(4px) scale(0.94);
+        animation: none;
+      }
+      @keyframes hintPulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 0.75;
+        }
+        50% {
+          transform: scale(1.05);
+          opacity: 1;
+        }
+      }
+      #lightning {
+        position: absolute;
+        inset: 0;
+        width: 300px;
+        height: 250px;
+        z-index: 20;
+        pointer-events: none;
+        opacity: 0;
+      }
+      #lightning.show {
+        opacity: 1;
+      }
+      #flash {
+        position: absolute;
+        inset: 0;
+        z-index: 21;
+        pointer-events: none;
+        opacity: 0;
+        background: rgba(235, 247, 255, 0);
+      }
+      #flash.go {
+        animation: flashBurst 0.62s ease-out 1;
+      }
+      @keyframes flashBurst {
+        0% {
+          opacity: 0;
+          background: rgba(240, 249, 255, 0);
+        }
+        8% {
+          opacity: 1;
+          background: rgba(240, 249, 255, 0.72);
+        }
+        17% {
+          opacity: 0.16;
+          background: rgba(240, 249, 255, 0.12);
+        }
+        27% {
+          opacity: 0.9;
+          background: rgba(225, 240, 255, 0.6);
+        }
+        42% {
+          opacity: 0.08;
+          background: rgba(225, 240, 255, 0.08);
+        }
+        100% {
+          opacity: 0;
+          background: rgba(225, 240, 255, 0);
+        }
+      }
+      #scene2 {
+        position: absolute;
+        inset: 0;
+        z-index: 30;
+        width: 300px;
+        height: 250px;
+        background: #000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.25s ease;
+        pointer-events: none;
+      }
+      #scene2.show {
+        opacity: 1;
+        visibility: visible;
+      }
+      #scene2 video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        background: #000;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #hint,
+        .battery.charging {
+          animation: none;
+        }
+      }
+      #cornerIcon {
+        position: absolute;
+        top: 0px;
+        left: 0px;
+        width: 15px;
+        height: auto;
+        z-index: 10;
+        display: block;
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="creative">
+      <img
+        id="cornerIcon"
+        src="./assets/adcelerete.png"
+        alt=""
+        aria-hidden="true"
+      />
+      <section id="scene1">
+        <img class="bg" src="./assets/phone.jpg" alt="" />
+        <div class="shade"></div>
+        <div class="battery-ui">
+          <div id="battery" class="battery">
+            <div class="cell"></div>
+            <div class="cell"></div>
+            <div class="cell"></div>
+            <div class="cell"></div>
+            <div class="cell"></div>
+            <div id="pct">0%</div>
+          </div>
+          <div id="hint">TAP &amp; HOLD</div>
+        </div>
+      </section>
+      <canvas id="lightning" width="300" height="250"></canvas>
+      <div id="flash"></div>
+      <section id="scene2">
+        <video
+          id="video"
+          src="./assets/creative-6video2.mp4"
+          muted
+          playsinline
+          preload="auto"
+        ></video>
+      </section>
+    </div>
+    <script>
+      (function () {
+        const AUTO_START_DELAY = 3000,
+          SHOW_LEVEL_DURATION = 600, // intro fill up to the user's real level
+          CHARGE_DURATION = 1500, // time to charge from real level to 100%
+          THUNDER_DURATION = 650,
+          FINAL_HOLD = 2000;
+        const creative = document.getElementById("creative"),
+          scene1 = document.getElementById("scene1"),
+          scene2 = document.getElementById("scene2"),
+          battery = document.getElementById("battery"),
+          cells = Array.from(document.querySelectorAll(".cell")),
+          pctEl = document.getElementById("pct"),
+          hint = document.getElementById("hint"),
+          canvas = document.getElementById("lightning"),
+          ctx = canvas.getContext("2d"),
+          flash = document.getElementById("flash"),
+          video = document.getElementById("video");
+        let state = "idle",
+          autoTimer = null,
+          sceneTimer = null,
+          rafId = null,
+          realLevel = null;
+
+        /* ---------- real battery level ---------- */
+        // Battery Status API: Chrome / Edge / Opera / Android WebView.
+        // Not available on iOS/Safari/Firefox, or when blocked by the ad
+        // iframe's permissions policy -> we fall back to a believable demo level.
+        function fallbackLevel() {
+          return Math.floor(random(14, 38));
+        }
+        const batteryReady = (async function () {
+          try {
+            if (navigator.getBattery) {
+              const b = await navigator.getBattery();
+              if (b && typeof b.level === "number")
+                return Math.max(1, Math.round(b.level * 100));
+            }
+          } catch (e) {}
+          return fallbackLevel();
+        })();
+        batteryReady.then((v) => {
+          realLevel = v;
+          if (state === "idle") showIdleLevel(true);
+        });
+
+        /* ---------- battery drawing ---------- */
+        function setLevel(pct) {
+          pct = Math.max(0, Math.min(100, pct));
+          cells.forEach((c, i) => {
+            const h = Math.max(0, Math.min(1, (pct - i * 20) / 20));
+            c.style.setProperty("--h", h * 100 + "%");
+          });
+          pctEl.textContent = Math.round(pct) + "%";
+          battery.classList.toggle("low", pct <= 20 && state !== "charging");
+        }
+        function ease(t) {
+          return 1 - Math.pow(1 - t, 3);
+        }
+        function animateLevel(from, to, duration, done) {
+          cancelAnimationFrame(rafId);
+          const t0 = performance.now();
+          function frame(now) {
+            const t = Math.min(1, (now - t0) / duration);
+            setLevel(from + (to - from) * ease(t));
+            if (t < 1) rafId = requestAnimationFrame(frame);
+            else if (done) done();
+          }
+          rafId = requestAnimationFrame(frame);
+        }
+        function resetBattery() {
+          cancelAnimationFrame(rafId);
+          battery.classList.remove("charging", "full", "low");
+          pctEl.classList.remove("show");
+          setLevel(0);
+          if (realLevel != null && state === "idle") showIdleLevel(false);
+        }
+        // Idle screen: battery already shows the user's real percentage
+        function showIdleLevel(animate) {
+          pctEl.classList.add("show");
+          if (animate) animateLevel(0, realLevel, SHOW_LEVEL_DURATION);
+          else setLevel(realLevel);
+        }
+
+        /* ---------- flow ---------- */
+        async function startCharging() {
+          if (state !== "idle") return;
+          state = "charging";
+          clearTimeout(autoTimer);
+          hint.classList.add("hide");
+          const level = realLevel != null ? realLevel : await batteryReady;
+          if (state !== "charging") return;
+          pctEl.classList.add("show");
+          battery.classList.add("charging");
+          battery.classList.remove("low");
+          const dur = Math.max(700, CHARGE_DURATION * ((100 - level) / 100) + 500);
+          animateLevel(level, 100, dur, () => {
+            battery.classList.remove("charging");
+            battery.classList.add("full");
+            sceneTimer = setTimeout(startThunder, 180);
+          });
+        }
+        function random(min, max) {
+          return Math.random() * (max - min) + min;
+        }
+        function makeBolt() {
+          const pts = [];
+          let x = random(70, 230),
+            y = -8;
+          pts.push({ x, y });
+          while (y < 250) {
+            y += random(13, 23);
+            x += random(-18, 18);
+            x = Math.max(10, Math.min(290, x));
+            pts.push({ x, y: Math.min(250, y) });
+          }
+          return pts;
+        }
+        function strokeBolt(points, width, color, blur) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(points[0].x, points[0].y);
+          for (let i = 1; i < points.length; i++)
+            ctx.lineTo(points[i].x, points[i].y);
+          ctx.lineWidth = width;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          ctx.strokeStyle = color;
+          ctx.shadowColor = color;
+          ctx.shadowBlur = blur;
+          ctx.stroke();
+          ctx.restore();
+        }
+        function drawBranch(x, y, dir) {
+          const pts = [{ x, y }],
+            count = Math.floor(random(2, 5));
+          for (let i = 0; i < count; i++) {
+            x += dir * random(8, 20);
+            y += random(7, 15);
+            pts.push({ x, y });
+          }
+          strokeBolt(pts, 1.2, "rgba(220,240,255,.88)", 8);
+        }
+        function drawStrike() {
+          ctx.clearRect(0, 0, 300, 250);
+          const bolt = makeBolt();
+          strokeBolt(bolt, 8, "rgba(110,180,255,.18)", 24);
+          strokeBolt(bolt, 3, "rgba(190,225,255,.98)", 15);
+          strokeBolt(bolt, 1.1, "#fff", 6);
+          for (let i = 2; i < bolt.length - 2; i++) {
+            if (Math.random() < 0.28)
+              drawBranch(bolt[i].x, bolt[i].y, Math.random() < 0.5 ? -1 : 1);
+          }
+        }
+        function startThunder() {
+          state = "thunder";
+          canvas.classList.add("show");
+          drawStrike();
+          flash.classList.remove("go");
+          void flash.offsetWidth;
+          flash.classList.add("go");
+          setTimeout(() => ctx.clearRect(0, 0, 300, 250), 95);
+          setTimeout(drawStrike, 170);
+          setTimeout(() => ctx.clearRect(0, 0, 300, 250), 330);
+          sceneTimer = setTimeout(() => {
+            canvas.classList.remove("show");
+            flash.classList.remove("go");
+            startVideo();
+          }, THUNDER_DURATION);
+        }
+        async function startVideo() {
+          state = "video";
+          scene2.classList.add("show");
+          scene1.classList.add("hide");
+          video.pause();
+          try {
+            video.currentTime = 0;
+          } catch (e) {}
+          try {
+            await video.play();
+          } catch (e) {
+            resetCreative();
+          }
+        }
+        video.addEventListener("ended", () => {
+          if (state !== "video") return;
+          state = "hold";
+          sceneTimer = setTimeout(resetCreative, FINAL_HOLD);
+        });
+        function scheduleAuto() {
+          clearTimeout(autoTimer);
+          autoTimer = setTimeout(() => {
+            if (state === "idle") startCharging();
+          }, AUTO_START_DELAY);
+        }
+        function resetCreative() {
+          clearTimeout(autoTimer);
+          clearTimeout(sceneTimer);
+          video.pause();
+          try {
+            video.currentTime = 0;
+          } catch (e) {}
+          scene2.classList.remove("show");
+          scene1.classList.remove("hide");
+          canvas.classList.remove("show");
+          flash.classList.remove("go");
+          ctx.clearRect(0, 0, 300, 250);
+          state = "idle";
+          resetBattery();
+          hint.classList.remove("hide");
+          scheduleAuto();
+        }
+        creative.addEventListener(
+          "pointerdown",
+          (e) => {
+            if (state !== "idle") return;
+            e.preventDefault();
+            startCharging();
+          },
+          { passive: false },
+        );
+        creative.addEventListener("contextmenu", (e) => e.preventDefault());
+        resetBattery();
+        scheduleAuto();
+      })();
+    </script>
+  </body>
+</html>
